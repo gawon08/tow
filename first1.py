@@ -1,42 +1,41 @@
 import streamlit as st
 import pandas as pd
+import os
 
-# 제목
-st.title("2025년 5월 연령별 인구 현황 분석")
+# 앱 제목
+st.title("2025년 5월 기준 연령별 인구 현황 분석")
 
-# 고정된 파일 경로
-file_path = "/mnt/data/202505_202505_연령별인구현황_월간.csv"
+# 파일 경로 지정
+file_path = "202505_202505_연령별인구현황_월간.csv"
 
-# CSV 불러오기
-df = pd.read_csv(file_path, encoding='euc-kr')
+# 파일 존재 여부 확인
+if not os.path.exists(file_path):
+    st.error(f"'{file_path}' 파일이 현재 디렉토리에 존재하지 않습니다.")
+else:
+    # CSV 파일 읽기
+    df = pd.read_csv(file_path, encoding='euc-kr')
 
-# 총인구수 컬럼 추출
-total_pop_col = [col for col in df.columns if "2025년05월_계_총인구수" in col][0]
-df["총인구수"] = df[total_pop_col].astype(str).str.replace(",", "").astype(int)
+    # '총인구수' 컬럼 확인
+    total_pop_col = '총인구수'
 
-# 연령별 컬럼 필터링
-age_cols = [col for col in df.columns if col.startswith("2025년05월_계_") and "세" in col]
-age_col_map = {col: col.replace("2025년05월_계_", "").replace("세", "").strip() for col in age_cols}
+    # 연령별 인구 컬럼 필터링
+    age_cols = [col for col in df.columns if col.startswith('2025년05월_계_') and '세' in col]
+    renamed_cols = {col: col.split('_')[-1].replace('세', '') for col in age_cols}
+    df = df.rename(columns=renamed_cols)
 
-# 필요한 데이터 정리
-df_age = df[["행정구역", "총인구수"] + age_cols].rename(columns=age_col_map)
+    # 상위 5개 행정구역 추출
+    df_top5 = df.sort_values(by=total_pop_col, ascending=False).head(5)
 
-# 총인구수 기준 상위 5개 지역 선정
-top5_df = df_age.sort_values(by="총인구수", ascending=False).head(5)
+    # 연령별 데이터 변환
+    age_only = list(renamed_cols.values())  # 연령 숫자만
+    chart_data = df_top5[age_only].transpose()
+    chart_data.columns = df_top5['행정구역(동읍면)별']
+    chart_data.index.name = '연령'
 
-# Melt: 연령별 인구 분포 그래프용
-melted = top5_df.melt(id_vars=["행정구역", "총인구수"], var_name="연령", value_name="인구")
-melted["인구"] = melted["인구"].astype(str).str.replace(",", "").replace("nan", "0").astype(int)
-melted["연령"] = melted["연령"].astype(int)
+    # 시각화
+    st.subheader("📈 연령별 인구 추이 (상위 5개 행정구역)")
+    st.line_chart(chart_data)
 
-# 데이터 일부 미리 보기
-st.subheader("📄 원본 데이터 미리보기")
-st.dataframe(df.iloc[:, :15])
-
-# 시각화
-st.subheader("📈 상위 5개 지역의 연령별 인구 분포")
-
-for region in melted["행정구역"].unique():
-    region_df = melted[melted["행정구역"] == region].sort_values(by="연령")
-    st.write(f"### {region}")
-    st.line_chart(region_df.set_index("연령")[["인구"]])
+    # 원본 데이터 표시
+    st.subheader("📄 원본 데이터")
+    st.dataframe(df)
