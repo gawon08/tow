@@ -1,50 +1,42 @@
 import streamlit as st
 import pandas as pd
 
-st.title("2025년 5월 기준 연령별 인구 현황 시각화")
+# CSV 파일 업로드
+st.title("2025년 5월 기준 연령별 인구 현황")
 
-FILE_PATH = "202505_202505_연령별인구현황_월간.csv"
+#uploaded_file = st.file_uploader("CSV 파일을 업로드하세요 (EUC-KR 인코딩)", type="csv")
 
-# CSV 파일 읽기
-try:
-    try:
-        df = pd.read_csv(FILE_PATH, encoding='euc-kr')
-    except:
-        df = pd.read_csv(FILE_PATH, encoding='utf-8')
-except Exception as e:
-    st.error(f"CSV 파일을 불러오는 데 실패했습니다: {e}")
-    st.stop()
+if True:
+    df = pd.read_csv("202505_202505_연령별인구현황_월간.csv", encoding='euc-kr')
 
-# 열 이름 공백 제거
-df.columns = df.columns.str.strip()
+    # 데이터 전처리
+    df['총인구수'] = df['2025년05월_계_총인구수'].str.replace(',', '').astype(int)
+    age_columns = [col for col in df.columns if col.startswith('2025년05월_계_') and ('세' in col or '100세 이상' in col)]
+    new_columns = []
+    for col in age_columns:
+        if '100세 이상' in col:
+            new_columns.append('100세 이상')
+        else:
+            new_columns.append(col.replace('2025년05월_계_', '').replace('세', '') + '세')
+    df_age = df[['행정구역', '총인구수'] + age_columns].copy()
+    df_age.columns = ['행정구역', '총인구수'] + new_columns
 
-# 실제 컬럼 이름 확인 (디버그용)
-st.write("✅ 현재 데이터 컬럼:", df.columns.tolist())
+    # 상위 5개 행정구역 추출
+    top5_df = df_age.sort_values(by='총인구수', ascending=False).head(5)
 
-# 연령별 인구 열 추출 및 이름 정리
-age_cols = [col for col in df.columns if col.startswith('2025년05월_계_') and '세' in col]
-renamed_cols = {col: col.split('_')[-1].replace('세', '') for col in age_cols}
-df.rename(columns=renamed_cols, inplace=True)
+    # 원본 데이터 출력
+    st.subheader("📊 원본 데이터 (상위 5개 행정구역)")
+    st.dataframe(top5_df)
 
-# '총인구수' 열이 실제 존재하는지 확인
-if '총인구수' not in df.columns:
-    st.error("'총인구수' 컬럼을 찾을 수 없습니다. 실제 컬럼명을 확인해주세요.")
-    st.dataframe(df.head())
-    st.stop()
+    # 선그래프 출력
+    st.subheader("📈 상위 5개 행정구역 연령별 인구 변화")
+    age_columns_only = top5_df.columns[2:]
 
-# 상위 5개 지역 추출
-top5_df = df.sort_values(by='총인구수', ascending=False).head(5)
-
-# 연령 그래프 데이터 구성
-age_numbers = list(renamed_cols.values())
-chart_df = top5_df[age_numbers].transpose()
-chart_df.columns = top5_df['행정구역(동읍면)별']
-chart_df.index.name = '연령'
-
-# 시각화
-st.subheader("📈 상위 5개 지역의 연령별 인구")
-st.line_chart(chart_df)
-
-# 원본 데이터 표시
-st.subheader("🗃 원본 데이터")
-st.dataframe(df)
+    for index, row in top5_df.iterrows():
+        st.write(f"### {row['행정구역']}")
+        age_data = row[2:].astype(str).str.replace(',', '').astype(int)
+        age_df = pd.DataFrame({
+            '연령': age_columns_only,
+            '인구수': age_data.values
+        }).set_index('연령')
+        st.line_chart(age_df)
